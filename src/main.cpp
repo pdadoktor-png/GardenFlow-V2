@@ -23,7 +23,10 @@ void setup()
 
     valveManager.begin();
     scheduler.begin();
-    displayManager.begin(valveManager);
+    
+    displayManager.begin(
+        valveManager,
+        scheduler);
 
     Serial.println("System bereit");
 }

@@ -5,11 +5,16 @@
 
 #include "AppConfig.h"
 #include "ValveManager.h"
+#include "Scheduler.h"
 
 class DisplayManager
 {
 public:
-    void begin(ValveManager& valveManager);
+    //void begin(ValveManager& valveManager);
+    void begin(
+        ValveManager& valveManager,
+        Scheduler& scheduler
+);
     void update();
 
     void refreshValve(uint8_t index);
@@ -37,6 +42,8 @@ private:
     };
 
     ValveManager* valveManager_ = nullptr;
+    Scheduler* scheduler_ = nullptr;
+
     ValveWidgets widgets_[AppConfig::DISPLAYED_VALVE_COUNT];
 
     lv_obj_t* pages_[static_cast<uint8_t>(Page::Count)] = {};
@@ -91,4 +98,5 @@ private:
     void updateToast();
     void applyBrightness(uint8_t percent);
     void applyPulseDuration(uint32_t durationMs);
+    void rebuildProgramList();
 };

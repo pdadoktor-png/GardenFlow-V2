@@ -31,8 +31,12 @@ namespace
     }
 }
 
-void DisplayManager::begin(ValveManager& valveManager)
+//void DisplayManager::begin(ValveManager& valveManager)
+void DisplayManager::begin(
+    ValveManager& valveManager,
+    Scheduler& scheduler)
 {
+    scheduler_ = &scheduler;
     instance_ = this;
     valveManager_ = &valveManager;
     valveManager_->setStateChangedCallback(valveStateChanged);
@@ -298,8 +302,7 @@ void DisplayManager::createProgramsPage(lv_obj_t* parent)
     lv_obj_t* heading = createLabel(parent, "Wochenprogramme", Theme::text());
     lv_obj_set_pos(heading, 14, 8);
 
-    createProgramCard(parent, 1, "Ventil 1", "06:30", "15 Minuten", 34);
-    createProgramCard(parent, 2, "Ventil 2", "20:00", "10 Minuten", 105);
+    rebuildProgramList();
 }
 
 void DisplayManager::createStatusPage(lv_obj_t* parent)
@@ -670,4 +673,45 @@ void DisplayManager::applyPulseDuration(uint32_t durationMs)
         "Gewuenschte Impulsdauer: %lu ms\n",
         static_cast<unsigned long>(durationMs)
     );
+}
+
+void DisplayManager::rebuildProgramList()
+{
+    if (scheduler_ == nullptr)
+        return;
+
+    lv_obj_t* page =
+        pages_[static_cast<uint8_t>(Page::Programs)];
+
+    uint16_t y = 34;
+
+    for(uint8_t i=0;i<scheduler_->programCount();i++)
+    {
+        auto& p = scheduler_->program(i);
+
+        if(!p.enabled)
+            continue;
+
+        char valve[20];
+        sprintf(valve,"Ventil %u",p.valveIndex+1);
+
+        char time[10];
+        sprintf(time,"%02u:%02u",
+                p.startHour,
+                p.startMinute);
+
+        char duration[20];
+        sprintf(duration,"%lu Minuten",
+                p.durationSeconds/60);
+
+        createProgramCard(
+            page,
+            i+1,
+            valve,
+            time,
+            duration,
+            y);
+
+        y += 71;
+    }
 }
