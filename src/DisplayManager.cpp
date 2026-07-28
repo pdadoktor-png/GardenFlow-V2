@@ -177,14 +177,48 @@ void DisplayManager::navigationEvent(lv_event_t* event)
 
 void DisplayManager::programSwitchEvent(lv_event_t* event)
 {
-    if (instance_ == nullptr || lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED)
+    if (instance_ == nullptr ||
+        instance_->scheduler_ == nullptr ||
+        lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED)
     {
         return;
     }
 
-    lv_obj_t* sw = static_cast<lv_obj_t*>(lv_event_get_target(event));
-    const bool enabled = lv_obj_has_state(sw, LV_STATE_CHECKED);
-    instance_->showMessage(enabled ? "Programm aktiviert" : "Programm deaktiviert");
+    lv_obj_t* sw =
+        static_cast<lv_obj_t*>(lv_event_get_target(event));
+
+    const uintptr_t rawIndex =
+        reinterpret_cast<uintptr_t>(
+            lv_event_get_user_data(event)
+        );
+
+    const uint8_t programIndex =
+        static_cast<uint8_t>(rawIndex);
+
+    if (programIndex >= instance_->scheduler_->programCount())
+    {
+        return;
+    }
+
+    const bool enabled =
+        lv_obj_has_state(sw, LV_STATE_CHECKED);
+
+    auto& program =
+        instance_->scheduler_->program(programIndex);
+
+    program.enabled = enabled;
+
+    Serial.printf(
+        "Programm %u: %s\n",
+        static_cast<unsigned>(programIndex + 1),
+        enabled ? "aktiviert" : "deaktiviert"
+    );
+
+    instance_->showMessage(
+        enabled
+            ? "Programm aktiviert"
+            : "Programm deaktiviert"
+    );
 }
 
 void DisplayManager::brightnessSliderEvent(lv_event_t* event)
@@ -447,33 +481,56 @@ void DisplayManager::createValveCard(lv_obj_t* parent, uint8_t index, int x)
     lv_obj_align(ui.counterLabel, LV_ALIGN_BOTTOM_MID, 0, 1);
 }
 
+
 void DisplayManager::createProgramCard(
+    ProgramWidgets& ui,
     lv_obj_t* parent,
     uint8_t number,
     const char* valve,
     const char* timeText,
     const char* durationText,
-    int y)
+    int y
+)
 {
-    lv_obj_t* card = lv_obj_create(parent);
-    lv_obj_set_size(card, 452, 62);
-    lv_obj_set_pos(card, 14, y);
-    configurePanel(card);
+    ui.card = lv_obj_create(parent);
+    lv_obj_set_size(ui.card, 452, 62);
+    lv_obj_set_pos(ui.card, 14, y);
+    configurePanel(ui.card);
 
-    lv_obj_t* title = lv_label_create(card);
-    lv_label_set_text_fmt(title, "Programm %u", number);
-    lv_obj_set_style_text_color(title, Theme::text(), 0);
-    lv_obj_set_pos(title, 0, 0);
+    ui.title = lv_label_create(ui.card);
+    lv_label_set_text_fmt(
+        ui.title,
+        "Programm %u",
+        static_cast<unsigned>(number)
+    );
+    lv_obj_set_style_text_color(ui.title, Theme::text(), 0);
+    lv_obj_set_pos(ui.title, 0, 0);
 
-    lv_obj_t* details = lv_label_create(card);
-    lv_label_set_text_fmt(details, "%s  |  %s  |  %s", valve, timeText, durationText);
-    lv_obj_set_style_text_color(details, Theme::textDim(), 0);
-    lv_obj_set_pos(details, 0, 28);
+    ui.details = lv_label_create(ui.card);
+    lv_label_set_text_fmt(
+        ui.details,
+        "%s  |  %s  |  %s",
+        valve,
+        timeText,
+        durationText
+    );
+    lv_obj_set_style_text_color(ui.details, Theme::textDim(), 0);
+    lv_obj_set_pos(ui.details, 0, 28);
 
-    lv_obj_t* sw = lv_switch_create(card);
-    lv_obj_set_size(sw, 52, 28);
-    lv_obj_align(sw, LV_ALIGN_RIGHT_MID, -2, 0);
-    lv_obj_add_event_cb(sw, programSwitchEvent, LV_EVENT_VALUE_CHANGED, nullptr);
+    ui.enableSwitch = lv_switch_create(ui.card);
+    lv_obj_set_size(ui.enableSwitch, 52, 28);
+    lv_obj_align(ui.enableSwitch, LV_ALIGN_RIGHT_MID, -2, 0);
+
+    ui.programIndex = number - 1;
+
+    lv_obj_add_event_cb(
+        ui.enableSwitch,
+        programSwitchEvent,
+        LV_EVENT_VALUE_CHANGED,
+        reinterpret_cast<void*>(
+            static_cast<uintptr_t>(ui.programIndex)
+        )
+    );
 }
 
 void DisplayManager::createFooter(lv_obj_t* screen)
@@ -678,39 +735,74 @@ void DisplayManager::applyPulseDuration(uint32_t durationMs)
 void DisplayManager::rebuildProgramList()
 {
     if (scheduler_ == nullptr)
+    {
         return;
+    }
 
     lv_obj_t* page =
         pages_[static_cast<uint8_t>(Page::Programs)];
 
-    uint16_t y = 34;
+    int y = 34;
 
-    for(uint8_t i=0;i<scheduler_->programCount();i++)
+    const uint8_t count =
+        min(
+            scheduler_->programCount(),
+            MAX_VISIBLE_PROGRAMS
+        );
+
+    for (uint8_t i = 0; i < count; ++i)
     {
-        auto& p = scheduler_->program(i);
+        const auto& program = scheduler_->program(i);
 
-        if(!p.enabled)
-            continue;
+        char valveText[20];
+        snprintf(
+            valveText,
+            sizeof(valveText),
+            "Ventil %u",
+            static_cast<unsigned>(program.valveIndex + 1)
+        );
 
-        char valve[20];
-        sprintf(valve,"Ventil %u",p.valveIndex+1);
+        char timeText[10];
+        snprintf(
+            timeText,
+            sizeof(timeText),
+            "%02u:%02u",
+            static_cast<unsigned>(program.startHour),
+            static_cast<unsigned>(program.startMinute)
+        );
 
-        char time[10];
-        sprintf(time,"%02u:%02u",
-                p.startHour,
-                p.startMinute);
-
-        char duration[20];
-        sprintf(duration,"%lu Minuten",
-                p.durationSeconds/60);
+        char durationText[20];
+        snprintf(
+            durationText,
+            sizeof(durationText),
+            "%u Minuten",
+            static_cast<unsigned>(program.durationSeconds / 60)
+        );
 
         createProgramCard(
+            programWidgets_[i],
             page,
-            i+1,
-            valve,
-            time,
-            duration,
-            y);
+            i + 1,
+            valveText,
+            timeText,
+            durationText,
+            y
+        );
+
+        if (program.enabled)
+        {
+            lv_obj_add_state(
+                programWidgets_[i].enableSwitch,
+                LV_STATE_CHECKED
+            );
+        }
+        else
+        {
+            lv_obj_clear_state(
+                programWidgets_[i].enableSwitch,
+                LV_STATE_CHECKED
+            );
+        }
 
         y += 71;
     }
