@@ -41,10 +41,23 @@ private:
         lv_obj_t* counterLabel = nullptr;
     };
 
+    struct ProgramWidgets
+    {
+        lv_obj_t* card = nullptr;
+        lv_obj_t* title = nullptr;
+        lv_obj_t* details = nullptr;
+        lv_obj_t* enableSwitch = nullptr;
+
+        uint8_t programIndex = 0;
+    };
+
     ValveManager* valveManager_ = nullptr;
     Scheduler* scheduler_ = nullptr;
 
     ValveWidgets widgets_[AppConfig::DISPLAYED_VALVE_COUNT];
+    static constexpr uint8_t MAX_VISIBLE_PROGRAMS = 16;
+
+    ProgramWidgets programWidgets_[MAX_VISIBLE_PROGRAMS];
 
     lv_obj_t* pages_[static_cast<uint8_t>(Page::Count)] = {};
     lv_obj_t* navButtons_[static_cast<uint8_t>(Page::Count)] = {};
@@ -88,7 +101,7 @@ private:
     void createStatusPage(lv_obj_t* parent);
     void createSetupPage(lv_obj_t* parent);
     void createValveCard(lv_obj_t* parent, uint8_t index, int x);
-    void createProgramCard(lv_obj_t* parent, uint8_t number, const char* valve,
+    void createProgramCard(ProgramWidgets& ui,lv_obj_t* parent, uint8_t number, const char* valve,
                            const char* timeText, const char* durationText, int y);
     void createFooter(lv_obj_t* screen);
 
