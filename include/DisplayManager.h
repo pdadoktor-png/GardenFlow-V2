@@ -6,6 +6,7 @@
 #include "AppConfig.h"
 #include "ValveManager.h"
 #include "Scheduler.h"
+#include "ProgramsPage.h"
 
 class DisplayManager
 {
@@ -41,23 +42,12 @@ private:
         lv_obj_t* counterLabel = nullptr;
     };
 
-    struct ProgramWidgets
-    {
-        lv_obj_t* card = nullptr;
-        lv_obj_t* title = nullptr;
-        lv_obj_t* details = nullptr;
-        lv_obj_t* enableSwitch = nullptr;
-
-        uint8_t programIndex = 0;
-    };
 
     ValveManager* valveManager_ = nullptr;
     Scheduler* scheduler_ = nullptr;
 
     ValveWidgets widgets_[AppConfig::DISPLAYED_VALVE_COUNT];
-    static constexpr uint8_t MAX_VISIBLE_PROGRAMS = 16;
-
-    ProgramWidgets programWidgets_[MAX_VISIBLE_PROGRAMS];
+    ProgramsPage programsPage_;
 
     lv_obj_t* pages_[static_cast<uint8_t>(Page::Count)] = {};
     lv_obj_t* navButtons_[static_cast<uint8_t>(Page::Count)] = {};
@@ -89,7 +79,6 @@ private:
     static void valveButtonEvent(lv_event_t* event);
     static void valveStateChanged(uint8_t index);
     static void navigationEvent(lv_event_t* event);
-    static void programSwitchEvent(lv_event_t* event);
     static void brightnessSliderEvent(lv_event_t* event);
     static void pulseSliderEvent(lv_event_t* event);
 
@@ -97,12 +86,9 @@ private:
     void createHeader(lv_obj_t* screen);
     void createPages(lv_obj_t* screen);
     void createManualPage(lv_obj_t* parent);
-    void createProgramsPage(lv_obj_t* parent);
     void createStatusPage(lv_obj_t* parent);
     void createSetupPage(lv_obj_t* parent);
     void createValveCard(lv_obj_t* parent, uint8_t index, int x);
-    void createProgramCard(ProgramWidgets& ui,lv_obj_t* parent, uint8_t number, const char* valve,
-                           const char* timeText, const char* durationText, int y);
     void createFooter(lv_obj_t* screen);
 
     void showPage(Page page);
@@ -111,5 +97,5 @@ private:
     void updateToast();
     void applyBrightness(uint8_t percent);
     void applyPulseDuration(uint32_t durationMs);
-    void rebuildProgramList();
+    
 };
