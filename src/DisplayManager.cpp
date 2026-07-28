@@ -175,61 +175,6 @@ void DisplayManager::navigationEvent(lv_event_t* event)
     instance_->showPage(static_cast<Page>(rawPage));
 }
 
-void DisplayManager::programSwitchEvent(lv_event_t* event)
-{
-    if (instance_ == nullptr ||
-        instance_->scheduler_ == nullptr ||
-        lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED)
-    {
-        return;
-    }
-
-    lv_obj_t* sw =
-        static_cast<lv_obj_t*>(lv_event_get_target(event));
-
-    const uintptr_t rawIndex =
-        reinterpret_cast<uintptr_t>(
-            lv_event_get_user_data(event)
-        );
-
-    const uint8_t programIndex =
-        static_cast<uint8_t>(rawIndex);
-
-    if (programIndex >= instance_->scheduler_->programCount())
-    {
-        return;
-    }
-
-    const bool enabled =
-        lv_obj_has_state(sw, LV_STATE_CHECKED);
-
-    const bool saved =
-        instance_->scheduler_->setProgramEnabled(
-            programIndex,
-            enabled
-        );
-
-    Serial.printf(
-        "Programm %u: %s\n",
-        static_cast<unsigned>(programIndex + 1),
-        enabled ? "aktiviert" : "deaktiviert"
-    );
-
-    if (saved)
-    {
-        instance_->showMessage(
-            enabled
-                ? "Programm aktiviert"
-                : "Programm deaktiviert"
-        );
-    }
-    else
-    {
-        instance_->showMessage(
-            "Speichern fehlgeschlagen"
-        );
-    }
-}
 
 void DisplayManager::brightnessSliderEvent(lv_event_t* event)
 {
@@ -329,10 +274,24 @@ void DisplayManager::createPages(lv_obj_t* screen)
         lv_obj_clear_flag(pages_[i], LV_OBJ_FLAG_SCROLLABLE);
     }
 
-    createManualPage(pages_[static_cast<uint8_t>(Page::Manual)]);
-    createProgramsPage(pages_[static_cast<uint8_t>(Page::Programs)]);
-    createStatusPage(pages_[static_cast<uint8_t>(Page::Status)]);
-    createSetupPage(pages_[static_cast<uint8_t>(Page::Setup)]);
+    createManualPage(
+        pages_[static_cast<uint8_t>(Page::Manual)]
+    );
+
+    programsPage_.begin(
+        pages_[static_cast<uint8_t>(Page::Programs)],
+        *scheduler_,
+        *this
+    );
+
+    createStatusPage(
+        pages_[static_cast<uint8_t>(Page::Status)]
+    );
+
+    createSetupPage(
+        pages_[static_cast<uint8_t>(Page::Setup)]
+    );
+
 }
 
 void DisplayManager::createManualPage(lv_obj_t* parent)
@@ -341,13 +300,6 @@ void DisplayManager::createManualPage(lv_obj_t* parent)
     createValveCard(parent, 1, 246);
 }
 
-void DisplayManager::createProgramsPage(lv_obj_t* parent)
-{
-    lv_obj_t* heading = createLabel(parent, "Wochenprogramme", Theme::text());
-    lv_obj_set_pos(heading, 14, 8);
-
-    rebuildProgramList();
-}
 
 void DisplayManager::createStatusPage(lv_obj_t* parent)
 {
@@ -491,57 +443,6 @@ void DisplayManager::createValveCard(lv_obj_t* parent, uint8_t index, int x)
     lv_obj_align(ui.counterLabel, LV_ALIGN_BOTTOM_MID, 0, 1);
 }
 
-
-void DisplayManager::createProgramCard(
-    ProgramWidgets& ui,
-    lv_obj_t* parent,
-    uint8_t number,
-    const char* valve,
-    const char* timeText,
-    const char* durationText,
-    int y
-)
-{
-    ui.card = lv_obj_create(parent);
-    lv_obj_set_size(ui.card, 452, 62);
-    lv_obj_set_pos(ui.card, 14, y);
-    configurePanel(ui.card);
-
-    ui.title = lv_label_create(ui.card);
-    lv_label_set_text_fmt(
-        ui.title,
-        "Programm %u",
-        static_cast<unsigned>(number)
-    );
-    lv_obj_set_style_text_color(ui.title, Theme::text(), 0);
-    lv_obj_set_pos(ui.title, 0, 0);
-
-    ui.details = lv_label_create(ui.card);
-    lv_label_set_text_fmt(
-        ui.details,
-        "%s  |  %s  |  %s",
-        valve,
-        timeText,
-        durationText
-    );
-    lv_obj_set_style_text_color(ui.details, Theme::textDim(), 0);
-    lv_obj_set_pos(ui.details, 0, 28);
-
-    ui.enableSwitch = lv_switch_create(ui.card);
-    lv_obj_set_size(ui.enableSwitch, 52, 28);
-    lv_obj_align(ui.enableSwitch, LV_ALIGN_RIGHT_MID, -2, 0);
-
-    ui.programIndex = number - 1;
-
-    lv_obj_add_event_cb(
-        ui.enableSwitch,
-        programSwitchEvent,
-        LV_EVENT_VALUE_CHANGED,
-        reinterpret_cast<void*>(
-            static_cast<uintptr_t>(ui.programIndex)
-        )
-    );
-}
 
 void DisplayManager::createFooter(lv_obj_t* screen)
 {
@@ -742,78 +643,3 @@ void DisplayManager::applyPulseDuration(uint32_t durationMs)
     );
 }
 
-void DisplayManager::rebuildProgramList()
-{
-    if (scheduler_ == nullptr)
-    {
-        return;
-    }
-
-    lv_obj_t* page =
-        pages_[static_cast<uint8_t>(Page::Programs)];
-
-    int y = 34;
-
-    const uint8_t count =
-        min(
-            scheduler_->programCount(),
-            MAX_VISIBLE_PROGRAMS
-        );
-
-    for (uint8_t i = 0; i < count; ++i)
-    {
-        const auto& program = scheduler_->program(i);
-
-        char valveText[20];
-        snprintf(
-            valveText,
-            sizeof(valveText),
-            "Ventil %u",
-            static_cast<unsigned>(program.valveIndex + 1)
-        );
-
-        char timeText[10];
-        snprintf(
-            timeText,
-            sizeof(timeText),
-            "%02u:%02u",
-            static_cast<unsigned>(program.startHour),
-            static_cast<unsigned>(program.startMinute)
-        );
-
-        char durationText[20];
-        snprintf(
-            durationText,
-            sizeof(durationText),
-            "%u Minuten",
-            static_cast<unsigned>(program.durationSeconds / 60)
-        );
-
-        createProgramCard(
-            programWidgets_[i],
-            page,
-            i + 1,
-            valveText,
-            timeText,
-            durationText,
-            y
-        );
-
-        if (program.enabled)
-        {
-            lv_obj_add_state(
-                programWidgets_[i].enableSwitch,
-                LV_STATE_CHECKED
-            );
-        }
-        else
-        {
-            lv_obj_clear_state(
-                programWidgets_[i].enableSwitch,
-                LV_STATE_CHECKED
-            );
-        }
-
-        y += 71;
-    }
-}
