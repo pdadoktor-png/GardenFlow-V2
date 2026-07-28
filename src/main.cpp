@@ -4,9 +4,11 @@
 
 #include "DisplayManager.h"
 #include "ValveManager.h"
+#include "Scheduler.h"
 
 static ValveManager valveManager;
 static DisplayManager displayManager;
+static Scheduler scheduler;
 
 void setup()
 {
@@ -15,12 +17,16 @@ void setup()
 
     Serial.println();
     Serial.println("================================");
-    Serial.println("GardenFlow V3 Professional");
+    Serial.println("GardenFlow Professional");
     Serial.println("ESP32-4827S043R");
     Serial.println("================================");
 
     valveManager.begin();
-    displayManager.begin(valveManager);
+    scheduler.begin();
+    
+    displayManager.begin(
+        valveManager,
+        scheduler);
 
     Serial.println("System bereit");
 }
@@ -28,6 +34,8 @@ void setup()
 void loop()
 {
     valveManager.update();
+    scheduler.update();
     displayManager.update();
+
     delay(5);
 }
