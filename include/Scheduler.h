@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <Preferences.h>
 
 class Scheduler
 {
@@ -22,7 +23,7 @@ public:
     {
         bool enabled = false;
 
-        // 0 = Ventil 1, 1 = Ventil 2 usw.
+        // 0 = Ventil 1, 1 = Ventil 2
         uint8_t valveIndex = 0;
 
         uint8_t startHour = 6;
@@ -46,6 +47,8 @@ public:
 
     uint8_t programCount() const;
 
+    bool setProgramEnabled(uint8_t index, bool enabled);
+
     bool setWeekday(
         uint8_t programIndex,
         Weekday weekday,
@@ -57,7 +60,14 @@ public:
         Weekday weekday
     ) const;
 
+    bool save();
+    bool load();
+    void restoreDefaults();
+
 private:
+    static constexpr uint32_t STORAGE_VERSION = 1;
+
+    Preferences preferences_;
     IrrigationProgram programs_[MAX_PROGRAMS];
 
     bool validProgramIndex(uint8_t index) const;

@@ -203,10 +203,11 @@ void DisplayManager::programSwitchEvent(lv_event_t* event)
     const bool enabled =
         lv_obj_has_state(sw, LV_STATE_CHECKED);
 
-    auto& program =
-        instance_->scheduler_->program(programIndex);
-
-    program.enabled = enabled;
+    const bool saved =
+        instance_->scheduler_->setProgramEnabled(
+            programIndex,
+            enabled
+        );
 
     Serial.printf(
         "Programm %u: %s\n",
@@ -214,11 +215,20 @@ void DisplayManager::programSwitchEvent(lv_event_t* event)
         enabled ? "aktiviert" : "deaktiviert"
     );
 
-    instance_->showMessage(
-        enabled
-            ? "Programm aktiviert"
-            : "Programm deaktiviert"
-    );
+    if (saved)
+    {
+        instance_->showMessage(
+            enabled
+                ? "Programm aktiviert"
+                : "Programm deaktiviert"
+        );
+    }
+    else
+    {
+        instance_->showMessage(
+            "Speichern fehlgeschlagen"
+        );
+    }
 }
 
 void DisplayManager::brightnessSliderEvent(lv_event_t* event)
