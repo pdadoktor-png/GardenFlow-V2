@@ -40,12 +40,19 @@ private:
 
     lv_obj_t* editorOverlay_ = nullptr;
     lv_obj_t* editorPanel_ = nullptr;
-    lv_obj_t* valveDropdown_ = nullptr;
-    lv_obj_t* hourSpinbox_ = nullptr;
-    lv_obj_t* minuteSpinbox_ = nullptr;
-    lv_obj_t* durationSpinbox_ = nullptr;
+
+    lv_obj_t* valve1Button_ = nullptr;
+    lv_obj_t* valve2Button_ = nullptr;
+
+    lv_obj_t* hourValueLabel_ = nullptr;
+    lv_obj_t* minuteValueLabel_ = nullptr;
+    lv_obj_t* durationValueLabel_ = nullptr;
 
     uint8_t editedProgramIndex_ = 0;
+    uint8_t draftValveIndex_ = 0;
+    uint8_t draftHour_ = 0;
+    uint8_t draftMinute_ = 0;
+    uint16_t draftDurationMinutes_ = 1;
 
     void rebuildProgramList();
 
@@ -64,26 +71,39 @@ private:
     void closeEditor();
     bool saveEditor();
 
-    lv_obj_t* createEditorLabel(
+    void refreshEditorValues();
+    void refreshValveButtons();
+
+    lv_obj_t* createTextButton(
         lv_obj_t* parent,
         const char* text,
         int x,
-        int y
+        int y,
+        int width,
+        int height,
+        lv_event_cb_t callback
     );
 
-    lv_obj_t* createSpinbox(
+    lv_obj_t* createValueLabel(
         lv_obj_t* parent,
         int x,
         int y,
-        int width,
-        int32_t minimum,
-        int32_t maximum,
-        int32_t value,
-        uint8_t digitCount
+        int width
     );
 
     static void programSwitchEvent(lv_event_t* event);
     static void programCardEvent(lv_event_t* event);
+
+    static void valve1Event(lv_event_t* event);
+    static void valve2Event(lv_event_t* event);
+
+    static void hourMinusEvent(lv_event_t* event);
+    static void hourPlusEvent(lv_event_t* event);
+    static void minuteMinusEvent(lv_event_t* event);
+    static void minutePlusEvent(lv_event_t* event);
+    static void durationMinusEvent(lv_event_t* event);
+    static void durationPlusEvent(lv_event_t* event);
+
     static void editorSaveEvent(lv_event_t* event);
     static void editorCancelEvent(lv_event_t* event);
 };

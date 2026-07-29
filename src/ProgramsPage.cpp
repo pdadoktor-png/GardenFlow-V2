@@ -5,7 +5,7 @@
 
 namespace
 {
-    void configureProgramPanel(lv_obj_t* object)
+    void configurePanel(lv_obj_t* object)
     {
         lv_obj_set_style_bg_color(object, Theme::panel(), 0);
         lv_obj_set_style_border_color(object, Theme::border(), 0);
@@ -15,11 +15,22 @@ namespace
         lv_obj_clear_flag(object, LV_OBJ_FLAG_SCROLLABLE);
     }
 
-    void configureEditorButton(lv_obj_t* button)
+    void configureButton(lv_obj_t* button)
     {
         lv_obj_set_style_radius(button, 8, 0);
         lv_obj_set_style_border_width(button, 1, 0);
         lv_obj_set_style_border_color(button, Theme::border(), 0);
+        lv_obj_set_style_bg_color(button, Theme::panel(), 0);
+        lv_obj_set_style_bg_color(
+            button,
+            lv_palette_main(LV_PALETTE_GREEN),
+            LV_STATE_CHECKED
+        );
+    }
+
+    void setLabelTextColor(lv_obj_t* label)
+    {
+        lv_obj_set_style_text_color(label, Theme::text(), 0);
     }
 }
 
@@ -35,7 +46,7 @@ void ProgramsPage::begin(
 
     lv_obj_t* heading = lv_label_create(parent_);
     lv_label_set_text(heading, "Wochenprogramme");
-    lv_obj_set_style_text_color(heading, Theme::text(), 0);
+    setLabelTextColor(heading);
     lv_obj_set_pos(heading, 14, 8);
 
     rebuildProgramList();
@@ -114,7 +125,9 @@ void ProgramsPage::rebuildProgramList()
             durationText,
             sizeof(durationText),
             "%u Minuten",
-            static_cast<unsigned>(scheduler_->durationMinutes(i))
+            static_cast<unsigned>(
+                scheduler_->durationMinutes(i)
+            )
         );
 
         createProgramCard(
@@ -147,7 +160,7 @@ void ProgramsPage::createProgramCard(
     ui.card = lv_obj_create(parent_);
     lv_obj_set_size(ui.card, 452, 62);
     lv_obj_set_pos(ui.card, 14, y);
-    configureProgramPanel(ui.card);
+    configurePanel(ui.card);
     lv_obj_add_flag(ui.card, LV_OBJ_FLAG_CLICKABLE);
 
     lv_obj_add_event_cb(
@@ -163,7 +176,7 @@ void ProgramsPage::createProgramCard(
         "Programm %u",
         static_cast<unsigned>(number)
     );
-    lv_obj_set_style_text_color(ui.title, Theme::text(), 0);
+    setLabelTextColor(ui.title);
     lv_obj_set_pos(ui.title, 0, 0);
 
     ui.details = lv_label_create(ui.card);
@@ -213,23 +226,29 @@ void ProgramsPage::updateProgramCard(uint8_t programIndex)
         static_cast<unsigned>(program.valveIndex + 1),
         static_cast<unsigned>(program.startHour),
         static_cast<unsigned>(program.startMinute),
-        static_cast<unsigned>(scheduler_->durationMinutes(programIndex))
+        static_cast<unsigned>(
+            scheduler_->durationMinutes(programIndex)
+        )
     );
 }
 
 void ProgramsPage::openEditor(uint8_t programIndex)
 {
-    if (parent_ == nullptr ||
-        scheduler_ == nullptr ||
+    if (scheduler_ == nullptr ||
         programIndex >= scheduler_->programCount())
     {
         return;
     }
 
     closeEditor();
+
     editedProgramIndex_ = programIndex;
 
     const auto& program = scheduler_->program(programIndex);
+    draftValveIndex_ = program.valveIndex;
+    draftHour_ = program.startHour;
+    draftMinute_ = program.startMinute;
+    draftDurationMinutes_ = scheduler_->durationMinutes(programIndex);
 
     editorOverlay_ = lv_obj_create(lv_layer_top());
     lv_obj_remove_style_all(editorOverlay_);
@@ -239,9 +258,9 @@ void ProgramsPage::openEditor(uint8_t programIndex)
     lv_obj_clear_flag(editorOverlay_, LV_OBJ_FLAG_SCROLLABLE);
 
     editorPanel_ = lv_obj_create(editorOverlay_);
-    lv_obj_set_size(editorPanel_, 440, 236);
+    lv_obj_set_size(editorPanel_, 452, 246);
     lv_obj_center(editorPanel_);
-    configureProgramPanel(editorPanel_);
+    configurePanel(editorPanel_);
 
     lv_obj_t* title = lv_label_create(editorPanel_);
     lv_label_set_text_fmt(
@@ -249,82 +268,102 @@ void ProgramsPage::openEditor(uint8_t programIndex)
         "Programm %u bearbeiten",
         static_cast<unsigned>(programIndex + 1)
     );
-    lv_obj_set_style_text_color(title, Theme::text(), 0);
-    lv_obj_set_pos(title, 10, 4);
+    setLabelTextColor(title);
+    lv_obj_set_pos(title, 8, 2);
 
-    createEditorLabel(editorPanel_, "Ventil", 12, 42);
-    valveDropdown_ = lv_dropdown_create(editorPanel_);
-    lv_dropdown_set_options(valveDropdown_, "Ventil 1\nVentil 2");
-    lv_dropdown_set_selected(valveDropdown_, program.valveIndex);
-    lv_obj_set_size(valveDropdown_, 120, 38);
-    lv_obj_set_pos(valveDropdown_, 12, 64);
+    lv_obj_t* valveLabel = lv_label_create(editorPanel_);
+    lv_label_set_text(valveLabel, "Ventil");
+    setLabelTextColor(valveLabel);
+    lv_obj_set_pos(valveLabel, 8, 32);
 
-    createEditorLabel(editorPanel_, "Startzeit", 154, 42);
-
-    hourSpinbox_ = createSpinbox(
-        editorPanel_, 154, 64, 64,
-        0, 23, program.startHour, 2
+    valve1Button_ = createTextButton(
+        editorPanel_,
+        "Ventil 1",
+        72,
+        26,
+        112,
+        40,
+        valve1Event
     );
 
-    lv_obj_t* separator = lv_label_create(editorPanel_);
-    lv_label_set_text(separator, ":");
-    lv_obj_set_style_text_color(separator, Theme::text(), 0);
-    lv_obj_set_pos(separator, 224, 74);
-
-    minuteSpinbox_ = createSpinbox(
-        editorPanel_, 242, 64, 64,
-        0, 59, program.startMinute, 2
+    valve2Button_ = createTextButton(
+        editorPanel_,
+        "Ventil 2",
+        194,
+        26,
+        112,
+        40,
+        valve2Event
     );
 
-    createEditorLabel(editorPanel_, "Dauer", 326, 42);
+    lv_obj_t* timeLabel = lv_label_create(editorPanel_);
+    lv_label_set_text(timeLabel, "Startzeit");
+    setLabelTextColor(timeLabel);
+    lv_obj_set_pos(timeLabel, 8, 84);
 
-    durationSpinbox_ = createSpinbox(
-        editorPanel_, 326, 64, 88,
-        Scheduler::MIN_DURATION_MINUTES,
-        Scheduler::MAX_DURATION_MINUTES,
-        scheduler_->durationMinutes(programIndex),
-        3
+    createTextButton(
+        editorPanel_, "-", 94, 76, 46, 44, hourMinusEvent
+    );
+    hourValueLabel_ = createValueLabel(editorPanel_, 145, 82, 52);
+    createTextButton(
+        editorPanel_, "+", 202, 76, 46, 44, hourPlusEvent
     );
 
-    lv_obj_t* minuteLabel = lv_label_create(editorPanel_);
-    lv_label_set_text(minuteLabel, "Minuten");
-    lv_obj_set_style_text_color(minuteLabel, Theme::textDim(), 0);
-    lv_obj_set_pos(minuteLabel, 340, 106);
+    lv_obj_t* colon = lv_label_create(editorPanel_);
+    lv_label_set_text(colon, ":");
+    setLabelTextColor(colon);
+    lv_obj_set_pos(colon, 256, 88);
 
-    lv_obj_t* hint = lv_label_create(editorPanel_);
-    lv_label_set_text(hint, "Werte durch Wischen oder Antippen aendern.");
-    lv_obj_set_style_text_color(hint, Theme::textDim(), 0);
-    lv_obj_set_pos(hint, 12, 137);
-
-    lv_obj_t* cancelButton = lv_btn_create(editorPanel_);
-    lv_obj_set_size(cancelButton, 130, 44);
-    lv_obj_set_pos(cancelButton, 84, 174);
-    configureEditorButton(cancelButton);
-    lv_obj_add_event_cb(
-        cancelButton,
-        editorCancelEvent,
-        LV_EVENT_CLICKED,
-        this
+    createTextButton(
+        editorPanel_, "-", 274, 76, 46, 44, minuteMinusEvent
+    );
+    minuteValueLabel_ = createValueLabel(editorPanel_, 325, 82, 52);
+    createTextButton(
+        editorPanel_, "+", 382, 76, 46, 44, minutePlusEvent
     );
 
-    lv_obj_t* cancelLabel = lv_label_create(cancelButton);
-    lv_label_set_text(cancelLabel, "Abbrechen");
-    lv_obj_center(cancelLabel);
+    lv_obj_t* durationLabel = lv_label_create(editorPanel_);
+    lv_label_set_text(durationLabel, "Dauer");
+    setLabelTextColor(durationLabel);
+    lv_obj_set_pos(durationLabel, 8, 142);
 
-    lv_obj_t* saveButton = lv_btn_create(editorPanel_);
-    lv_obj_set_size(saveButton, 130, 44);
-    lv_obj_set_pos(saveButton, 228, 174);
-    configureEditorButton(saveButton);
-    lv_obj_add_event_cb(
-        saveButton,
-        editorSaveEvent,
-        LV_EVENT_CLICKED,
-        this
+    createTextButton(
+        editorPanel_, "-", 94, 132, 46, 44, durationMinusEvent
+    );
+    durationValueLabel_ = createValueLabel(
+        editorPanel_, 145, 138, 92
+    );
+    createTextButton(
+        editorPanel_, "+", 242, 132, 46, 44, durationPlusEvent
     );
 
-    lv_obj_t* saveLabel = lv_label_create(saveButton);
-    lv_label_set_text(saveLabel, "Speichern");
-    lv_obj_center(saveLabel);
+    lv_obj_t* minutesLabel = lv_label_create(editorPanel_);
+    lv_label_set_text(minutesLabel, "Minuten");
+    lv_obj_set_style_text_color(minutesLabel, Theme::textDim(), 0);
+    lv_obj_set_pos(minutesLabel, 300, 144);
+
+    createTextButton(
+        editorPanel_,
+        "Abbrechen",
+        76,
+        190,
+        136,
+        42,
+        editorCancelEvent
+    );
+
+    createTextButton(
+        editorPanel_,
+        "Speichern",
+        238,
+        190,
+        136,
+        42,
+        editorSaveEvent
+    );
+
+    refreshEditorValues();
+    refreshValveButtons();
 }
 
 void ProgramsPage::closeEditor()
@@ -336,49 +375,40 @@ void ProgramsPage::closeEditor()
 
     editorOverlay_ = nullptr;
     editorPanel_ = nullptr;
-    valveDropdown_ = nullptr;
-    hourSpinbox_ = nullptr;
-    minuteSpinbox_ = nullptr;
-    durationSpinbox_ = nullptr;
+    valve1Button_ = nullptr;
+    valve2Button_ = nullptr;
+    hourValueLabel_ = nullptr;
+    minuteValueLabel_ = nullptr;
+    durationValueLabel_ = nullptr;
 }
 
 bool ProgramsPage::saveEditor()
 {
-    if (scheduler_ == nullptr ||
-        valveDropdown_ == nullptr ||
-        hourSpinbox_ == nullptr ||
-        minuteSpinbox_ == nullptr ||
-        durationSpinbox_ == nullptr)
+    if (scheduler_ == nullptr)
     {
         return false;
     }
 
-    const uint8_t valveIndex = static_cast<uint8_t>(
-        lv_dropdown_get_selected(valveDropdown_)
-    );
-    const uint8_t hour = static_cast<uint8_t>(
-        lv_spinbox_get_value(hourSpinbox_)
-    );
-    const uint8_t minute = static_cast<uint8_t>(
-        lv_spinbox_get_value(minuteSpinbox_)
-    );
-    const uint16_t durationMinutes = static_cast<uint16_t>(
-        lv_spinbox_get_value(durationSpinbox_)
-    );
-
-    if (!scheduler_->setValve(editedProgramIndex_, valveIndex))
+    if (!scheduler_->setValve(
+            editedProgramIndex_,
+            draftValveIndex_
+        ))
     {
         return false;
     }
 
-    if (!scheduler_->setStartTime(editedProgramIndex_, hour, minute))
+    if (!scheduler_->setStartTime(
+            editedProgramIndex_,
+            draftHour_,
+            draftMinute_
+        ))
     {
         return false;
     }
 
     if (!scheduler_->setDurationMinutes(
             editedProgramIndex_,
-            durationMinutes
+            draftDurationMinutes_
         ))
     {
         return false;
@@ -388,39 +418,97 @@ bool ProgramsPage::saveEditor()
     return true;
 }
 
-lv_obj_t* ProgramsPage::createEditorLabel(
+void ProgramsPage::refreshEditorValues()
+{
+    if (hourValueLabel_ != nullptr)
+    {
+        lv_label_set_text_fmt(
+            hourValueLabel_,
+            "%02u",
+            static_cast<unsigned>(draftHour_)
+        );
+    }
+
+    if (minuteValueLabel_ != nullptr)
+    {
+        lv_label_set_text_fmt(
+            minuteValueLabel_,
+            "%02u",
+            static_cast<unsigned>(draftMinute_)
+        );
+    }
+
+    if (durationValueLabel_ != nullptr)
+    {
+        lv_label_set_text_fmt(
+            durationValueLabel_,
+            "%u",
+            static_cast<unsigned>(draftDurationMinutes_)
+        );
+    }
+}
+
+void ProgramsPage::refreshValveButtons()
+{
+    if (valve1Button_ == nullptr || valve2Button_ == nullptr)
+    {
+        return;
+    }
+
+    if (draftValveIndex_ == 0)
+    {
+        lv_obj_add_state(valve1Button_, LV_STATE_CHECKED);
+        lv_obj_clear_state(valve2Button_, LV_STATE_CHECKED);
+    }
+    else
+    {
+        lv_obj_clear_state(valve1Button_, LV_STATE_CHECKED);
+        lv_obj_add_state(valve2Button_, LV_STATE_CHECKED);
+    }
+}
+
+lv_obj_t* ProgramsPage::createTextButton(
     lv_obj_t* parent,
     const char* text,
     int x,
-    int y
+    int y,
+    int width,
+    int height,
+    lv_event_cb_t callback
 )
 {
-    lv_obj_t* label = lv_label_create(parent);
+    lv_obj_t* button = lv_btn_create(parent);
+    lv_obj_set_size(button, width, height);
+    lv_obj_set_pos(button, x, y);
+    configureButton(button);
+
+    lv_obj_add_event_cb(
+        button,
+        callback,
+        LV_EVENT_CLICKED,
+        this
+    );
+
+    lv_obj_t* label = lv_label_create(button);
     lv_label_set_text(label, text);
-    lv_obj_set_style_text_color(label, Theme::text(), 0);
-    lv_obj_set_pos(label, x, y);
-    return label;
+    lv_obj_center(label);
+
+    return button;
 }
 
-lv_obj_t* ProgramsPage::createSpinbox(
+lv_obj_t* ProgramsPage::createValueLabel(
     lv_obj_t* parent,
     int x,
     int y,
-    int width,
-    int32_t minimum,
-    int32_t maximum,
-    int32_t value,
-    uint8_t digitCount
+    int width
 )
 {
-    lv_obj_t* spinbox = lv_spinbox_create(parent);
-    lv_spinbox_set_range(spinbox, minimum, maximum);
-    lv_spinbox_set_digit_format(spinbox, digitCount, 0);
-    lv_spinbox_set_step(spinbox, 1);
-    lv_spinbox_set_value(spinbox, value);
-    lv_obj_set_size(spinbox, width, 38);
-    lv_obj_set_pos(spinbox, x, y);
-    return spinbox;
+    lv_obj_t* label = lv_label_create(parent);
+    lv_obj_set_width(label, width);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    setLabelTextColor(label);
+    lv_obj_set_pos(label, x, y);
+    return label;
 }
 
 void ProgramsPage::programSwitchEvent(lv_event_t* event)
@@ -443,47 +531,32 @@ void ProgramsPage::programSwitchEvent(lv_event_t* event)
 
     ProgramsPage& page = *ui->owner;
 
-    if (ui->programIndex >= page.scheduler_->programCount())
-    {
-        return;
-    }
-
     lv_obj_t* sw = static_cast<lv_obj_t*>(
         lv_event_get_target(event)
     );
 
-    const bool enabled = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    const bool enabled =
+        lv_obj_has_state(sw, LV_STATE_CHECKED);
 
     const bool saved = page.scheduler_->setProgramEnabled(
         ui->programIndex,
         enabled
     );
 
-    Serial.printf(
-        "Programm %u: %s\n",
-        static_cast<unsigned>(ui->programIndex + 1),
-        enabled ? "aktiviert" : "deaktiviert"
-    );
-
-    if (page.displayManager_ == nullptr)
+    if (page.displayManager_ != nullptr)
     {
-        return;
+        page.displayManager_->showMessage(
+            saved
+                ? (enabled
+                    ? "Programm aktiviert"
+                    : "Programm deaktiviert")
+                : "Speichern fehlgeschlagen"
+        );
     }
-
-    page.displayManager_->showMessage(
-        saved
-            ? (enabled ? "Programm aktiviert" : "Programm deaktiviert")
-            : "Speichern fehlgeschlagen"
-    );
 }
 
 void ProgramsPage::programCardEvent(lv_event_t* event)
 {
-    if (lv_event_get_code(event) != LV_EVENT_CLICKED)
-    {
-        return;
-    }
-
     auto* ui = static_cast<ProgramWidgets*>(
         lv_event_get_user_data(event)
     );
@@ -494,13 +567,134 @@ void ProgramsPage::programCardEvent(lv_event_t* event)
     }
 }
 
+void ProgramsPage::valve1Event(lv_event_t* event)
+{
+    auto* page = static_cast<ProgramsPage*>(
+        lv_event_get_user_data(event)
+    );
+
+    if (page != nullptr)
+    {
+        page->draftValveIndex_ = 0;
+        page->refreshValveButtons();
+    }
+}
+
+void ProgramsPage::valve2Event(lv_event_t* event)
+{
+    auto* page = static_cast<ProgramsPage*>(
+        lv_event_get_user_data(event)
+    );
+
+    if (page != nullptr)
+    {
+        page->draftValveIndex_ = 1;
+        page->refreshValveButtons();
+    }
+}
+
+void ProgramsPage::hourMinusEvent(lv_event_t* event)
+{
+    auto* page = static_cast<ProgramsPage*>(
+        lv_event_get_user_data(event)
+    );
+
+    if (page != nullptr)
+    {
+        page->draftHour_ =
+            (page->draftHour_ == 0)
+                ? 23
+                : page->draftHour_ - 1;
+        page->refreshEditorValues();
+    }
+}
+
+void ProgramsPage::hourPlusEvent(lv_event_t* event)
+{
+    auto* page = static_cast<ProgramsPage*>(
+        lv_event_get_user_data(event)
+    );
+
+    if (page != nullptr)
+    {
+        page->draftHour_ =
+            (page->draftHour_ >= 23)
+                ? 0
+                : page->draftHour_ + 1;
+        page->refreshEditorValues();
+    }
+}
+
+void ProgramsPage::minuteMinusEvent(lv_event_t* event)
+{
+    auto* page = static_cast<ProgramsPage*>(
+        lv_event_get_user_data(event)
+    );
+
+    if (page != nullptr)
+    {
+        page->draftMinute_ =
+            (page->draftMinute_ == 0)
+                ? 59
+                : page->draftMinute_ - 1;
+        page->refreshEditorValues();
+    }
+}
+
+void ProgramsPage::minutePlusEvent(lv_event_t* event)
+{
+    auto* page = static_cast<ProgramsPage*>(
+        lv_event_get_user_data(event)
+    );
+
+    if (page != nullptr)
+    {
+        page->draftMinute_ =
+            (page->draftMinute_ >= 59)
+                ? 0
+                : page->draftMinute_ + 1;
+        page->refreshEditorValues();
+    }
+}
+
+void ProgramsPage::durationMinusEvent(lv_event_t* event)
+{
+    auto* page = static_cast<ProgramsPage*>(
+        lv_event_get_user_data(event)
+    );
+
+    if (page != nullptr)
+    {
+        if (page->draftDurationMinutes_ >
+            Scheduler::MIN_DURATION_MINUTES)
+        {
+            --page->draftDurationMinutes_;
+        }
+
+        page->refreshEditorValues();
+    }
+}
+
+void ProgramsPage::durationPlusEvent(lv_event_t* event)
+{
+    auto* page = static_cast<ProgramsPage*>(
+        lv_event_get_user_data(event)
+    );
+
+    if (page != nullptr)
+    {
+        if (page->draftDurationMinutes_ <
+            Scheduler::MAX_DURATION_MINUTES)
+        {
+            ++page->draftDurationMinutes_;
+        }
+
+        page->refreshEditorValues();
+    }
+}
+
 void ProgramsPage::editorSaveEvent(lv_event_t* event)
 {
-    if (lv_event_get_code(event) != LV_EVENT_CLICKED)
-    {
-        return;
-    }
-
     auto* page = static_cast<ProgramsPage*>(
         lv_event_get_user_data(event)
     );
@@ -515,7 +709,9 @@ void ProgramsPage::editorSaveEvent(lv_event_t* event)
     if (page->displayManager_ != nullptr)
     {
         page->displayManager_->showMessage(
-            saved ? "Programm gespeichert" : "Speichern fehlgeschlagen"
+            saved
+                ? "Programm gespeichert"
+                : "Speichern fehlgeschlagen"
         );
     }
 
@@ -527,11 +723,6 @@ void ProgramsPage::editorSaveEvent(lv_event_t* event)
 
 void ProgramsPage::editorCancelEvent(lv_event_t* event)
 {
-    if (lv_event_get_code(event) != LV_EVENT_CLICKED)
-    {
-        return;
-    }
-
     auto* page = static_cast<ProgramsPage*>(
         lv_event_get_user_data(event)
     );
