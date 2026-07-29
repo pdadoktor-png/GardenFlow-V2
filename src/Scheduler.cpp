@@ -95,6 +95,96 @@ bool Scheduler::setProgramEnabled(
     return save();
 }
 
+bool Scheduler::setValve(
+    uint8_t programIndex,
+    uint8_t valveIndex
+)
+{
+    if (!validProgramIndex(programIndex) ||
+        !validValveIndex(valveIndex))
+    {
+        return false;
+    }
+
+    if (programs_[programIndex].valveIndex == valveIndex)
+    {
+        return true;
+    }
+
+    programs_[programIndex].valveIndex = valveIndex;
+
+    return save();
+}
+
+bool Scheduler::setStartTime(
+    uint8_t programIndex,
+    uint8_t hour,
+    uint8_t minute
+)
+{
+    if (!validProgramIndex(programIndex) ||
+        hour > 23 ||
+        minute > 59)
+    {
+        return false;
+    }
+
+    IrrigationProgram& selectedProgram =
+        programs_[programIndex];
+
+    if (selectedProgram.startHour == hour &&
+        selectedProgram.startMinute == minute)
+    {
+        return true;
+    }
+
+    selectedProgram.startHour = hour;
+    selectedProgram.startMinute = minute;
+
+    return save();
+}
+
+bool Scheduler::setDurationMinutes(
+    uint8_t programIndex,
+    uint16_t minutes
+)
+{
+    if (!validProgramIndex(programIndex) ||
+        minutes < MIN_DURATION_MINUTES ||
+        minutes > MAX_DURATION_MINUTES)
+    {
+        return false;
+    }
+
+    const uint32_t durationSeconds =
+        static_cast<uint32_t>(minutes) * 60UL;
+
+    if (programs_[programIndex].durationSeconds ==
+        durationSeconds)
+    {
+        return true;
+    }
+
+    programs_[programIndex].durationSeconds =
+        durationSeconds;
+
+    return save();
+}
+
+uint16_t Scheduler::durationMinutes(
+    uint8_t programIndex
+) const
+{
+    if (!validProgramIndex(programIndex))
+    {
+        return 0;
+    }
+
+    return static_cast<uint16_t>(
+        programs_[programIndex].durationSeconds / 60UL
+    );
+}
+
 bool Scheduler::setWeekday(
     uint8_t programIndex,
     Weekday weekday,
@@ -117,6 +207,14 @@ bool Scheduler::setWeekday(
     const uint8_t mask =
         static_cast<uint8_t>(1U << weekdayIndex);
 
+    const bool currentlyEnabled =
+        (programs_[programIndex].weekdays & mask) != 0;
+
+    if (currentlyEnabled == enabled)
+    {
+        return true;
+    }
+
     if (enabled)
     {
         programs_[programIndex].weekdays |= mask;
@@ -127,7 +225,7 @@ bool Scheduler::setWeekday(
             static_cast<uint8_t>(~mask);
     }
 
-    return true;
+    return save();
 }
 
 bool Scheduler::isWeekdayEnabled(
@@ -265,12 +363,12 @@ void Scheduler::restoreDefaults()
     programs_[0].startHour = 6;
     programs_[0].startMinute = 30;
     programs_[0].durationSeconds = 15UL * 60UL;
-
-    setWeekday(0, Weekday::Monday, true);
-    setWeekday(0, Weekday::Tuesday, true);
-    setWeekday(0, Weekday::Wednesday, true);
-    setWeekday(0, Weekday::Thursday, true);
-    setWeekday(0, Weekday::Friday, true);
+    programs_[0].weekdays =
+        (1U << static_cast<uint8_t>(Weekday::Monday)) |
+        (1U << static_cast<uint8_t>(Weekday::Tuesday)) |
+        (1U << static_cast<uint8_t>(Weekday::Wednesday)) |
+        (1U << static_cast<uint8_t>(Weekday::Thursday)) |
+        (1U << static_cast<uint8_t>(Weekday::Friday));
 
     // Programm 2:
     // Ventil 2, Samstag und Sonntag, 20:00, 10 Minuten
@@ -279,12 +377,17 @@ void Scheduler::restoreDefaults()
     programs_[1].startHour = 20;
     programs_[1].startMinute = 0;
     programs_[1].durationSeconds = 10UL * 60UL;
-
-    setWeekday(1, Weekday::Saturday, true);
-    setWeekday(1, Weekday::Sunday, true);
+    programs_[1].weekdays =
+        (1U << static_cast<uint8_t>(Weekday::Saturday)) |
+        (1U << static_cast<uint8_t>(Weekday::Sunday));
 }
 
 bool Scheduler::validProgramIndex(uint8_t index) const
 {
     return index < MAX_PROGRAMS;
+}
+
+bool Scheduler::validValveIndex(uint8_t index) const
+{
+    return index < VALVE_COUNT;
 }
