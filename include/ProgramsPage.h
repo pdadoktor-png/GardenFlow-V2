@@ -38,6 +38,15 @@ private:
 
     ProgramWidgets widgets_[MAX_VISIBLE_PROGRAMS];
 
+    lv_obj_t* editorOverlay_ = nullptr;
+    lv_obj_t* editorPanel_ = nullptr;
+    lv_obj_t* valveDropdown_ = nullptr;
+    lv_obj_t* hourSpinbox_ = nullptr;
+    lv_obj_t* minuteSpinbox_ = nullptr;
+    lv_obj_t* durationSpinbox_ = nullptr;
+
+    uint8_t editedProgramIndex_ = 0;
+
     void rebuildProgramList();
 
     void createProgramCard(
@@ -49,5 +58,32 @@ private:
         int y
     );
 
+    void updateProgramCard(uint8_t programIndex);
+
+    void openEditor(uint8_t programIndex);
+    void closeEditor();
+    bool saveEditor();
+
+    lv_obj_t* createEditorLabel(
+        lv_obj_t* parent,
+        const char* text,
+        int x,
+        int y
+    );
+
+    lv_obj_t* createSpinbox(
+        lv_obj_t* parent,
+        int x,
+        int y,
+        int width,
+        int32_t minimum,
+        int32_t maximum,
+        int32_t value,
+        uint8_t digitCount
+    );
+
     static void programSwitchEvent(lv_event_t* event);
+    static void programCardEvent(lv_event_t* event);
+    static void editorSaveEvent(lv_event_t* event);
+    static void editorCancelEvent(lv_event_t* event);
 };
