@@ -26,10 +26,7 @@ jobs:
       - name: PlatformIO installieren
         run: |
           python -m pip install --upgrade pip
-          python -m pip install platformio
+          pip install platformio
 
-      - name: PlatformIO-Version anzeigen
-        run: pio --version
-
-      - name: Projekt bauen
-        run: pio run -e esp32-4827S043R
+      - name: Build
+        run: pio run
