@@ -5,13 +5,18 @@
 
 namespace
 {
+    constexpr const char* WEEKDAY_NAMES[7] =
+    {
+        "Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"
+    };
+
     void configurePanel(lv_obj_t* object)
     {
         lv_obj_set_style_bg_color(object, Theme::panel(), 0);
         lv_obj_set_style_border_color(object, Theme::border(), 0);
         lv_obj_set_style_border_width(object, 1, 0);
         lv_obj_set_style_radius(object, Theme::CARD_RADIUS, 0);
-        lv_obj_set_style_pad_all(object, 10, 0);
+        lv_obj_set_style_pad_all(object, 8, 0);
         lv_obj_clear_flag(object, LV_OBJ_FLAG_SCROLLABLE);
     }
 
@@ -180,6 +185,8 @@ void ProgramsPage::createProgramCard(
     lv_obj_set_pos(ui.title, 0, 0);
 
     ui.details = lv_label_create(ui.card);
+    lv_obj_set_width(ui.details, 360);
+    lv_label_set_long_mode(ui.details, LV_LABEL_LONG_CLIP);
     lv_label_set_text_fmt(
         ui.details,
         "%s  |  %s  |  %s",
@@ -249,6 +256,7 @@ void ProgramsPage::openEditor(uint8_t programIndex)
     draftHour_ = program.startHour;
     draftMinute_ = program.startMinute;
     draftDurationMinutes_ = scheduler_->durationMinutes(programIndex);
+    draftWeekdays_ = program.weekdays;
 
     editorOverlay_ = lv_obj_create(lv_layer_top());
     lv_obj_remove_style_all(editorOverlay_);
@@ -269,86 +277,100 @@ void ProgramsPage::openEditor(uint8_t programIndex)
         static_cast<unsigned>(programIndex + 1)
     );
     setLabelTextColor(title);
-    lv_obj_set_pos(title, 8, 2);
+    lv_obj_set_pos(title, 6, 0);
 
     lv_obj_t* valveLabel = lv_label_create(editorPanel_);
-    lv_label_set_text(valveLabel, "Ventil");
+    lv_label_set_text_fmt(
+        valveLabel,
+        "Ventil %u",
+        static_cast<unsigned>(draftValveIndex_ + 1)
+    );
     setLabelTextColor(valveLabel);
-    lv_obj_set_pos(valveLabel, 8, 32);
+    lv_obj_set_pos(valveLabel, 6, 31);
 
-    valve1Button_ = createTextButton(
-        editorPanel_,
-        "Ventil 1",
-        72,
-        26,
-        112,
-        40,
-        valve1Event
+    lv_obj_t* valveHint = lv_label_create(editorPanel_);
+    lv_label_set_text(
+        valveHint,
+        "Ventil ist durch das gewählte Programm festgelegt"
     );
-
-    valve2Button_ = createTextButton(
-        editorPanel_,
-        "Ventil 2",
-        194,
-        26,
-        112,
-        40,
-        valve2Event
-    );
+    lv_obj_set_style_text_color(valveHint, Theme::textDim(), 0);
+    lv_obj_set_pos(valveHint, 82, 31);
 
     lv_obj_t* timeLabel = lv_label_create(editorPanel_);
-    lv_label_set_text(timeLabel, "Startzeit");
+    lv_label_set_text(timeLabel, "Start");
     setLabelTextColor(timeLabel);
-    lv_obj_set_pos(timeLabel, 8, 84);
+    lv_obj_set_pos(timeLabel, 6, 75);
 
     createTextButton(
-        editorPanel_, "-", 94, 76, 46, 44, hourMinusEvent
+        editorPanel_, "-", 70, 64, 42, 38, hourMinusEvent
     );
-    hourValueLabel_ = createValueLabel(editorPanel_, 145, 82, 52);
+    hourValueLabel_ = createValueLabel(editorPanel_, 116, 72, 42);
     createTextButton(
-        editorPanel_, "+", 202, 76, 46, 44, hourPlusEvent
+        editorPanel_, "+", 162, 64, 42, 38, hourPlusEvent
     );
 
     lv_obj_t* colon = lv_label_create(editorPanel_);
     lv_label_set_text(colon, ":");
     setLabelTextColor(colon);
-    lv_obj_set_pos(colon, 256, 88);
+    lv_obj_set_pos(colon, 214, 75);
 
     createTextButton(
-        editorPanel_, "-", 274, 76, 46, 44, minuteMinusEvent
+        editorPanel_, "-", 230, 64, 42, 38, minuteMinusEvent
     );
-    minuteValueLabel_ = createValueLabel(editorPanel_, 325, 82, 52);
+    minuteValueLabel_ = createValueLabel(editorPanel_, 276, 72, 42);
     createTextButton(
-        editorPanel_, "+", 382, 76, 46, 44, minutePlusEvent
+        editorPanel_, "+", 322, 64, 42, 38, minutePlusEvent
     );
 
     lv_obj_t* durationLabel = lv_label_create(editorPanel_);
     lv_label_set_text(durationLabel, "Dauer");
     setLabelTextColor(durationLabel);
-    lv_obj_set_pos(durationLabel, 8, 142);
+    lv_obj_set_pos(durationLabel, 6, 117);
 
     createTextButton(
-        editorPanel_, "-", 94, 132, 46, 44, durationMinusEvent
+        editorPanel_, "-", 70, 106, 42, 38, durationMinusEvent
     );
     durationValueLabel_ = createValueLabel(
-        editorPanel_, 145, 138, 92
+        editorPanel_, 116, 114, 66
     );
     createTextButton(
-        editorPanel_, "+", 242, 132, 46, 44, durationPlusEvent
+        editorPanel_, "+", 186, 106, 42, 38, durationPlusEvent
     );
 
     lv_obj_t* minutesLabel = lv_label_create(editorPanel_);
-    lv_label_set_text(minutesLabel, "Minuten");
+    lv_label_set_text(minutesLabel, "Min.");
     lv_obj_set_style_text_color(minutesLabel, Theme::textDim(), 0);
-    lv_obj_set_pos(minutesLabel, 300, 144);
+    lv_obj_set_pos(minutesLabel, 238, 117);
+
+    lv_obj_t* weekdayLabel = lv_label_create(editorPanel_);
+    lv_label_set_text(weekdayLabel, "Tage");
+    setLabelTextColor(weekdayLabel);
+    lv_obj_set_pos(weekdayLabel, 6, 158);
+
+    for (uint8_t i = 0; i < WEEKDAY_COUNT; ++i)
+    {
+        weekdayContexts_[i].owner = this;
+        weekdayContexts_[i].weekdayIndex = i;
+
+        weekdayButtons_[i] = createTextButton(
+            editorPanel_,
+            WEEKDAY_NAMES[i],
+            54 + (i * 54),
+            148,
+            48,
+            36,
+            weekdayEvent,
+            &weekdayContexts_[i]
+        );
+    }
 
     createTextButton(
         editorPanel_,
         "Abbrechen",
-        76,
-        190,
+        74,
+        194,
         136,
-        42,
+        40,
         editorCancelEvent
     );
 
@@ -356,14 +378,14 @@ void ProgramsPage::openEditor(uint8_t programIndex)
         editorPanel_,
         "Speichern",
         238,
-        190,
+        194,
         136,
-        42,
+        40,
         editorSaveEvent
     );
 
     refreshEditorValues();
-    refreshValveButtons();
+    refreshWeekdayButtons();
 }
 
 void ProgramsPage::closeEditor()
@@ -375,24 +397,19 @@ void ProgramsPage::closeEditor()
 
     editorOverlay_ = nullptr;
     editorPanel_ = nullptr;
-    valve1Button_ = nullptr;
-    valve2Button_ = nullptr;
     hourValueLabel_ = nullptr;
     minuteValueLabel_ = nullptr;
     durationValueLabel_ = nullptr;
+
+    for (uint8_t i = 0; i < WEEKDAY_COUNT; ++i)
+    {
+        weekdayButtons_[i] = nullptr;
+    }
 }
 
 bool ProgramsPage::saveEditor()
 {
     if (scheduler_ == nullptr)
-    {
-        return false;
-    }
-
-    if (!scheduler_->setValve(
-            editedProgramIndex_,
-            draftValveIndex_
-        ))
     {
         return false;
     }
@@ -412,6 +429,21 @@ bool ProgramsPage::saveEditor()
         ))
     {
         return false;
+    }
+
+    for (uint8_t i = 0; i < WEEKDAY_COUNT; ++i)
+    {
+        const bool enabled =
+            (draftWeekdays_ & static_cast<uint8_t>(1U << i)) != 0;
+
+        if (!scheduler_->setWeekday(
+                editedProgramIndex_,
+                static_cast<Scheduler::Weekday>(i),
+                enabled
+            ))
+        {
+            return false;
+        }
     }
 
     updateProgramCard(editedProgramIndex_);
@@ -448,22 +480,31 @@ void ProgramsPage::refreshEditorValues()
     }
 }
 
-void ProgramsPage::refreshValveButtons()
+void ProgramsPage::refreshWeekdayButtons()
 {
-    if (valve1Button_ == nullptr || valve2Button_ == nullptr)
+    for (uint8_t i = 0; i < WEEKDAY_COUNT; ++i)
     {
-        return;
-    }
+        if (weekdayButtons_[i] == nullptr)
+        {
+            continue;
+        }
 
-    if (draftValveIndex_ == 0)
-    {
-        lv_obj_add_state(valve1Button_, LV_STATE_CHECKED);
-        lv_obj_clear_state(valve2Button_, LV_STATE_CHECKED);
-    }
-    else
-    {
-        lv_obj_clear_state(valve1Button_, LV_STATE_CHECKED);
-        lv_obj_add_state(valve2Button_, LV_STATE_CHECKED);
+        const uint8_t mask = static_cast<uint8_t>(1U << i);
+
+        if ((draftWeekdays_ & mask) != 0)
+        {
+            lv_obj_add_state(
+                weekdayButtons_[i],
+                LV_STATE_CHECKED
+            );
+        }
+        else
+        {
+            lv_obj_clear_state(
+                weekdayButtons_[i],
+                LV_STATE_CHECKED
+            );
+        }
     }
 }
 
@@ -474,7 +515,8 @@ lv_obj_t* ProgramsPage::createTextButton(
     int y,
     int width,
     int height,
-    lv_event_cb_t callback
+    lv_event_cb_t callback,
+    void* userData
 )
 {
     lv_obj_t* button = lv_btn_create(parent);
@@ -486,7 +528,7 @@ lv_obj_t* ProgramsPage::createTextButton(
         button,
         callback,
         LV_EVENT_CLICKED,
-        this
+        userData != nullptr ? userData : this
     );
 
     lv_obj_t* label = lv_label_create(button);
@@ -564,32 +606,6 @@ void ProgramsPage::programCardEvent(lv_event_t* event)
     if (ui != nullptr && ui->owner != nullptr)
     {
         ui->owner->openEditor(ui->programIndex);
-    }
-}
-
-void ProgramsPage::valve1Event(lv_event_t* event)
-{
-    auto* page = static_cast<ProgramsPage*>(
-        lv_event_get_user_data(event)
-    );
-
-    if (page != nullptr)
-    {
-        page->draftValveIndex_ = 0;
-        page->refreshValveButtons();
-    }
-}
-
-void ProgramsPage::valve2Event(lv_event_t* event)
-{
-    auto* page = static_cast<ProgramsPage*>(
-        lv_event_get_user_data(event)
-    );
-
-    if (page != nullptr)
-    {
-        page->draftValveIndex_ = 1;
-        page->refreshValveButtons();
     }
 }
 
@@ -691,6 +707,27 @@ void ProgramsPage::durationPlusEvent(lv_event_t* event)
 
         page->refreshEditorValues();
     }
+}
+
+void ProgramsPage::weekdayEvent(lv_event_t* event)
+{
+    auto* context = static_cast<WeekdayButtonContext*>(
+        lv_event_get_user_data(event)
+    );
+
+    if (context == nullptr ||
+        context->owner == nullptr ||
+        context->weekdayIndex >= WEEKDAY_COUNT)
+    {
+        return;
+    }
+
+    ProgramsPage& page = *context->owner;
+    const uint8_t mask =
+        static_cast<uint8_t>(1U << context->weekdayIndex);
+
+    page.draftWeekdays_ ^= mask;
+    page.refreshWeekdayButtons();
 }
 
 void ProgramsPage::editorSaveEvent(lv_event_t* event)
