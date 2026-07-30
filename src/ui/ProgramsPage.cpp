@@ -28,6 +28,27 @@ namespace
     {
         lv_obj_set_style_text_color(label, Theme::text(), 0);
     }
+
+    void formatWeekdays(uint8_t mask, char* output, size_t outputSize)
+    {
+        if (output == nullptr || outputSize == 0) return;
+        output[0] = '\0';
+        if ((mask & 0x7F) == 0x7F)
+        {
+            snprintf(output, outputSize, "taeglich");
+            return;
+        }
+        size_t used = 0;
+        for (uint8_t i = 0; i < 7; ++i)
+        {
+            if ((mask & static_cast<uint8_t>(1U << i)) == 0) continue;
+            const int written = snprintf(output + used, outputSize - used,
+                                         used == 0 ? "%s" : ",%s", WEEKDAY_NAMES[i]);
+            if (written <= 0 || static_cast<size_t>(written) >= outputSize - used) break;
+            used += static_cast<size_t>(written);
+        }
+        if (used == 0) snprintf(output, outputSize, "keine Tage");
+    }
 }
 
 void ProgramsPage::begin(lv_obj_t* parent, Scheduler& scheduler, DisplayManager& displayManager)
@@ -194,11 +215,13 @@ void ProgramsPage::updateProgramCard(uint8_t slotIndex)
         return;
     }
     const auto& p = scheduler_->program(slotIndex);
-    lv_label_set_text_fmt(widgets_[slotIndex].details, "%02u:%02u  |  %u Min.  |  ID %lu",
+    char days[40];
+    formatWeekdays(p.weekdays, days, sizeof(days));
+    lv_label_set_text_fmt(widgets_[slotIndex].details, "%02u:%02u  |  %u Min.  |  %s",
                           static_cast<unsigned>(p.startHour),
                           static_cast<unsigned>(p.startMinute),
                           static_cast<unsigned>(scheduler_->durationMinutes(slotIndex)),
-                          static_cast<unsigned long>(p.id));
+                          days);
 }
 
 void ProgramsPage::openEditor(uint8_t slotIndex)
@@ -210,6 +233,7 @@ void ProgramsPage::openEditor(uint8_t slotIndex)
     closeEditor();
     editedProgramIndex_ = slotIndex;
     const auto& p = scheduler_->program(slotIndex);
+    draftEnabled_ = p.enabled;
     draftHour_ = p.startHour;
     draftMinute_ = p.startMinute;
     draftDurationMinutes_ = scheduler_->durationMinutes(slotIndex);
@@ -229,10 +253,20 @@ void ProgramsPage::openEditor(uint8_t slotIndex)
     lv_obj_clear_flag(editorPanel_, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t* title = lv_label_create(editorPanel_);
-    lv_label_set_text_fmt(title, "Ventil %u - Programm bearbeiten",
+    lv_label_set_text_fmt(title, "Ventil %u - Programm",
                           static_cast<unsigned>(p.valveIndex + 1));
     styleLabel(title);
     lv_obj_set_pos(title, 6, 0);
+
+    lv_obj_t* activeLabel = lv_label_create(editorPanel_);
+    lv_label_set_text(activeLabel, "Aktiv");
+    lv_obj_set_style_text_color(activeLabel, Theme::textDim(), 0);
+    lv_obj_set_pos(activeLabel, 334, 0);
+
+    editorEnabledSwitch_ = lv_switch_create(editorPanel_);
+    lv_obj_set_size(editorEnabledSwitch_, 52, 28);
+    lv_obj_set_pos(editorEnabledSwitch_, 382, -5);
+    lv_obj_add_event_cb(editorEnabledSwitch_, editorEnabledEvent, LV_EVENT_VALUE_CHANGED, this);
 
     lv_obj_t* timeLabel = lv_label_create(editorPanel_);
     lv_label_set_text(timeLabel, "Start"); styleLabel(timeLabel); lv_obj_set_pos(timeLabel, 6, 48);
@@ -262,8 +296,11 @@ void ProgramsPage::openEditor(uint8_t slotIndex)
                                                48, 36, weekdayEvent, &weekdayContexts_[i]);
     }
 
-    createTextButton(editorPanel_, "Abbrechen", 74, 190, 136, 40, editorCancelEvent);
-    createTextButton(editorPanel_, "Speichern", 238, 190, 136, 40, editorSaveEvent);
+    lv_obj_t* deleteButton = createTextButton(editorPanel_, "Loeschen", 6, 190, 110, 40, editorDeleteEvent);
+    lv_obj_set_style_bg_color(deleteButton, lv_palette_darken(LV_PALETTE_RED, 3), 0);
+    createTextButton(editorPanel_, "Abbrechen", 126, 190, 140, 40, editorCancelEvent);
+    lv_obj_t* saveButton = createTextButton(editorPanel_, "Speichern", 276, 190, 158, 40, editorSaveEvent);
+    lv_obj_set_style_bg_color(saveButton, lv_palette_darken(LV_PALETTE_GREEN, 3), 0);
     refreshEditorValues();
     refreshWeekdayButtons();
 }
@@ -276,6 +313,7 @@ void ProgramsPage::closeEditor()
     }
     editorOverlay_ = nullptr;
     editorPanel_ = nullptr;
+    editorEnabledSwitch_ = nullptr;
     hourValueLabel_ = nullptr;
     minuteValueLabel_ = nullptr;
     durationValueLabel_ = nullptr;
@@ -291,7 +329,8 @@ bool ProgramsPage::saveEditor()
     {
         return false;
     }
-    if (!scheduler_->setStartTime(editedProgramIndex_, draftHour_, draftMinute_) ||
+    if (!scheduler_->setProgramEnabled(editedProgramIndex_, draftEnabled_) ||
+        !scheduler_->setStartTime(editedProgramIndex_, draftHour_, draftMinute_) ||
         !scheduler_->setDurationMinutes(editedProgramIndex_, draftDurationMinutes_))
     {
         return false;
@@ -308,8 +347,22 @@ bool ProgramsPage::saveEditor()
     return true;
 }
 
+bool ProgramsPage::deleteEditedProgram()
+{
+    if (scheduler_ == nullptr || !scheduler_->isProgramUsed(editedProgramIndex_))
+    {
+        return false;
+    }
+    return scheduler_->deleteProgram(editedProgramIndex_);
+}
+
 void ProgramsPage::refreshEditorValues()
 {
+    if (editorEnabledSwitch_)
+    {
+        if (draftEnabled_) lv_obj_add_state(editorEnabledSwitch_, LV_STATE_CHECKED);
+        else lv_obj_clear_state(editorEnabledSwitch_, LV_STATE_CHECKED);
+    }
     if (hourValueLabel_) lv_label_set_text_fmt(hourValueLabel_, "%02u", static_cast<unsigned>(draftHour_));
     if (minuteValueLabel_) lv_label_set_text_fmt(minuteValueLabel_, "%02u", static_cast<unsigned>(draftMinute_));
     if (durationValueLabel_) lv_label_set_text_fmt(durationValueLabel_, "%u", static_cast<unsigned>(draftDurationMinutes_));
@@ -398,6 +451,14 @@ void ProgramsPage::weekdayEvent(lv_event_t* event)
     c->owner->refreshWeekdayButtons();
 }
 
+void ProgramsPage::editorEnabledEvent(lv_event_t* event)
+{
+    auto* page = static_cast<ProgramsPage*>(lv_event_get_user_data(event));
+    if (!page) return;
+    lv_obj_t* sw = static_cast<lv_obj_t*>(lv_event_get_target(event));
+    page->draftEnabled_ = lv_obj_has_state(sw, LV_STATE_CHECKED);
+}
+
 void ProgramsPage::editorSaveEvent(lv_event_t* event)
 {
     auto* page = static_cast<ProgramsPage*>(lv_event_get_user_data(event));
@@ -411,4 +472,18 @@ void ProgramsPage::editorCancelEvent(lv_event_t* event)
 {
     auto* page = static_cast<ProgramsPage*>(lv_event_get_user_data(event));
     if (page) page->closeEditor();
+}
+
+void ProgramsPage::editorDeleteEvent(lv_event_t* event)
+{
+    auto* page = static_cast<ProgramsPage*>(lv_event_get_user_data(event));
+    if (!page) return;
+    const bool deleted = page->deleteEditedProgram();
+    if (page->displayManager_)
+        page->displayManager_->showMessage(deleted ? "Programm geloescht" : "Loeschen fehlgeschlagen");
+    if (deleted)
+    {
+        page->closeEditor();
+        page->rebuildProgramList();
+    }
 }

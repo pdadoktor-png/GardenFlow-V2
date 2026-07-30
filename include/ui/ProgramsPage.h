@@ -47,6 +47,7 @@ private:
 
     lv_obj_t* editorOverlay_ = nullptr;
     lv_obj_t* editorPanel_ = nullptr;
+    lv_obj_t* editorEnabledSwitch_ = nullptr;
     lv_obj_t* hourValueLabel_ = nullptr;
     lv_obj_t* minuteValueLabel_ = nullptr;
     lv_obj_t* durationValueLabel_ = nullptr;
@@ -54,6 +55,7 @@ private:
     WeekdayButtonContext weekdayContexts_[WEEKDAY_COUNT];
 
     uint8_t editedProgramIndex_ = 0;
+    bool draftEnabled_ = false;
     uint8_t draftHour_ = 0;
     uint8_t draftMinute_ = 0;
     uint16_t draftDurationMinutes_ = 1;
@@ -65,6 +67,7 @@ private:
     void openEditor(uint8_t slotIndex);
     void closeEditor();
     bool saveEditor();
+    bool deleteEditedProgram();
     void refreshEditorValues();
     void refreshWeekdayButtons();
 
@@ -83,6 +86,8 @@ private:
     static void durationMinusEvent(lv_event_t* event);
     static void durationPlusEvent(lv_event_t* event);
     static void weekdayEvent(lv_event_t* event);
+    static void editorEnabledEvent(lv_event_t* event);
     static void editorSaveEvent(lv_event_t* event);
     static void editorCancelEvent(lv_event_t* event);
+    static void editorDeleteEvent(lv_event_t* event);
 };
