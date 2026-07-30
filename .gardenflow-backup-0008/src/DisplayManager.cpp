@@ -516,11 +516,6 @@ void DisplayManager::showPage(Page page)
         }
     }
 
-    if (page == Page::Programs)
-    {
-        programsPage_.show();
-    }
-
     if (pageTitleLabel_ != nullptr)
     {
         lv_label_set_text(pageTitleLabel_, titles[selected]);
